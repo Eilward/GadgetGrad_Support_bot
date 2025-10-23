@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 # Загружаем переменные из .env (только при локальной разработке)
 load_dotenv()
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ Переменная TELEGRAM_BOT_TOKEN не задана! Проверьте файл .env или настройки хостинга.")
 
