@@ -1,13 +1,12 @@
 import asyncio
+import os
+from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-
-import os
-from dotenv import load_dotenv
 
 # Загружаем переменные из .env (только при локальной разработке)
 load_dotenv()
@@ -559,8 +558,26 @@ async def unknown_message(message: types.Message, state: FSMContext):
         )
 
 
+# === HEARTBEAT МОНИТОРИНГ ===
+ADMIN_CHAT_ID = 7955385938  # 👈 Ваш chat_id
+
+async def heartbeat_monitor(bot: Bot):
+    """Отправляет сообщение раз в час, чтобы подтвердить, что бот работает."""
+    while True:
+        try:
+            await bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text="✅ Техподдержка работает!"
+            )
+        except Exception as e:
+            print(f"[HEARTBEAT ERROR] Не удалось отправить сообщение: {e}")
+        await asyncio.sleep(3600)  # 3600 сек = 1 час
+
+
 async def main():
     print("✅ Бот запущен!")
+    # Запускаем мониторинг в фоне
+    asyncio.create_task(heartbeat_monitor(bot))
     await dp.start_polling(bot)
 
 
