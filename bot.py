@@ -1,5 +1,7 @@
 import asyncio
 import os
+import logging
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -13,7 +15,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("❌ Переменная TELEGRAM_BOT_TOKEN не задана! Проверьте файл .env или настройки хостинга.")
+    raise ValueError("❌ Переменная BOT_TOKEN не задана! Проверьте файл .env или настройки хостинга.")
 
 bot = Bot(token=BOT_TOKEN)
 
@@ -23,9 +25,18 @@ class SupportStates(StatesGroup):
     waiting_for_phone_type = State()
     waiting_for_screen_phone = State()
 
-
 dp = Dispatcher(storage=MemoryStorage())
 
+# === Настройки времени для отзыва ===
+REVIEW_DELAY = timedelta(minutes=40)
+last_interaction = {}  # user_id → datetime
+review_sent = set()    # user_id, которым уже отправлен запрос
+
+def update_last_interaction(user_id: int):
+    """Обновляет время последнего взаимодействия и сбрасывает флаг отзыва при новом обращении."""
+    last_interaction[user_id] = datetime.now()
+    if user_id in review_sent:
+        review_sent.discard(user_id)
 
 # === КЛАВИАТУРЫ ===
 
@@ -113,6 +124,7 @@ def get_other_questions_kb():
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
+    update_last_interaction(message.from_user.id)
     await message.answer(
         "👋 Здравствуйте! Это техническая поддержка GadgetGrad.\n\n"
         "Пожалуйста, выберите товар, по которому у вас возник вопрос:",
@@ -123,6 +135,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data.startswith("product:"), SupportStates.waiting_for_product)
 async def product_chosen(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     product_code = callback.data.split(":")[1]
     product_names = {
         "cl5": "Carlinkit 5.0",
@@ -153,6 +166,7 @@ async def product_chosen(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "q:screen_connect", SupportStates.waiting_for_question)
 async def screen_connect(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     await callback.message.edit_text(
         "📱 *Какой у вас смартфон?*",
         reply_markup=get_screen_phone_kb(),
@@ -164,6 +178,7 @@ async def screen_connect(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "q:screen_other", SupportStates.waiting_for_question)
 async def screen_other(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     data = await state.get_data()
     product = data.get("chosen_product", "Экран с CarPlay/AA")
     await callback.message.edit_text(
@@ -178,6 +193,7 @@ async def screen_other(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "q:screen_faq", SupportStates.waiting_for_question)
 async def screen_faq(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     text = (
         "❓ *Частые вопросы*\n\n"
         "1. *Вы недовольны доставкой?*\n"
@@ -223,6 +239,7 @@ async def screen_faq(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "q:screen_other_from_faq")
 async def screen_other_from_faq(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     data = await state.get_data()
     product = data.get("chosen_product", "Экран с CarPlay/AA")
     await callback.message.edit_text(
@@ -240,6 +257,7 @@ async def screen_other_from_faq(callback: types.CallbackQuery, state: FSMContext
     lambda c: c.data in ("screen_phone:iphone", "screen_phone:android")
 )
 async def screen_phone_chosen(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     phone = callback.data
     if phone == "screen_phone:iphone":
         text = (
@@ -274,6 +292,7 @@ async def screen_phone_chosen(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "back_to_screen_menu")
 async def back_to_screen_menu(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     product_data = await state.get_data()
     product_code = product_data.get("product_code", "screen")
     product_name = "Экран с CarPlay/AA"
@@ -287,10 +306,11 @@ async def back_to_screen_menu(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# === СТАРЫЕ ОБРАБОТЧИКИ (БЕЗ ИЗМЕНЕНИЙ) ===
+# === СТАРЫЕ ОБРАБОТЧИКИ (CL5 / CL5 Mini) ===
 
 @dp.callback_query(lambda c: c.data == "q:other_from_faq")
 async def other_from_faq(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     data = await state.get_data()
     product = data.get("chosen_product", "неизвестный товар")
     await callback.message.edit_text(
@@ -308,6 +328,7 @@ async def other_from_faq(callback: types.CallbackQuery, state: FSMContext):
     lambda c: not c.data.startswith("back_to_") and c.data not in ("q:other_from_faq", "q:screen_connect", "q:screen_faq", "q:screen_other", "q:screen_other_from_faq")
 )
 async def question_chosen(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     data = callback.data
     product_data = await state.get_data()
     product_code = product_data.get("product_code")
@@ -448,6 +469,7 @@ async def question_chosen(callback: types.CallbackQuery, state: FSMContext):
     lambda c: c.data in ("phone:iphone", "phone:android")
 )
 async def phone_type_chosen(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     phone = callback.data
     product_data = await state.get_data()
     product_code = product_data.get("product_code")
@@ -498,6 +520,7 @@ async def phone_type_chosen(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "back_to_products")
 async def back_to_products(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     await state.set_state(SupportStates.waiting_for_product)
     await callback.message.edit_text(
         "👋 Здравствуйте! Это техническая поддержка GadgetGrad.\n\n"
@@ -509,6 +532,7 @@ async def back_to_products(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "back_to_cl5_menu")
 async def back_to_cl5_menu(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
     product_data = await state.get_data()
     product_code = product_data.get("product_code", "cl5")
     product_name = "Carlinkit 5.0" if product_code == "cl5" else "Carlinkit 5.0 mini pro"
@@ -524,6 +548,7 @@ async def back_to_cl5_menu(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message()
 async def unknown_message(message: types.Message, state: FSMContext):
+    update_last_interaction(message.from_user.id)
     current_state = await state.get_state()
     if current_state == SupportStates.waiting_for_product:
         await message.answer(
@@ -558,26 +583,56 @@ async def unknown_message(message: types.Message, state: FSMContext):
         )
 
 
-# === HEARTBEAT МОНИТОРИНГ ===
+# === ФОНОВЫЕ ЗАДАЧИ ===
+
 ADMIN_CHAT_ID = 7955385938  # 👈 Ваш chat_id
 
 async def heartbeat_monitor(bot: Bot):
     """Отправляет сообщение раз в час, чтобы подтвердить, что бот работает."""
     while True:
         try:
-            await bot.send_message(
-                chat_id=ADMIN_CHAT_ID,
-                text="✅ Техподдержка работает!"
-            )
+            await bot.send_message(chat_id=ADMIN_CHAT_ID, text="✅ Техподдержка работает!")
         except Exception as e:
-            print(f"[HEARTBEAT ERROR] Не удалось отправить сообщение: {e}")
-        await asyncio.sleep(3600)  # 3600 сек = 1 час
+            logging.warning(f"[HEARTBEAT ERROR] Не удалось отправить сообщение: {e}")
+        await asyncio.sleep(3600)  # 1 час
 
+
+async def review_scheduler(bot: Bot):
+    """Проверяет пользователей и отправляет запрос на отзыв через 40 минут бездействия."""
+    while True:
+        now = datetime.now()
+        to_remove = []
+        for user_id, last_time in list(last_interaction.items()):
+            if user_id not in review_sent and now - last_time >= REVIEW_DELAY:
+                try:
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            "🙏 Спасибо, что обратились в поддержку **GadgetGrad**!\n"
+                            "Мы очень старались помочь вам — и очень надеемся, что у нас это получилось.\n\n"
+                            "Если вы остались довольны — не могли бы вы уделить пару минут и оставить **5 звёзд** на Wildberries?\n"
+                            "Ваш отзыв помогает другим покупателям уверенно выбирать технику, а нам — продолжать стараться ещё лучше 🌟🌟🌟🌟🌟\n\n"
+                            "С благодарностью,\n"
+                            "Команда **GadgetGrad**"
+                        ),
+                        parse_mode="Markdown"
+                    )
+                    review_sent.add(user_id)
+                except Exception as e:
+                    logging.warning(f"Не удалось отправить запрос на отзыв пользователю {user_id}: {e}")
+                to_remove.append(user_id)
+        for uid in to_remove:
+            last_interaction.pop(uid, None)
+        await asyncio.sleep(60)  # проверка раз в минуту
+
+
+# === ЗАПУСК ===
 
 async def main():
+    logging.basicConfig(level=logging.INFO)
     print("✅ Бот запущен!")
-    # Запускаем мониторинг в фоне
     asyncio.create_task(heartbeat_monitor(bot))
+    asyncio.create_task(review_scheduler(bot))
     await dp.start_polling(bot)
 
 
