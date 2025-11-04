@@ -124,6 +124,7 @@ def get_other_questions_kb():
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     update_last_interaction(message.from_user.id)
     await message.answer(
         "👋 Здравствуйте! Это техническая поддержка GadgetGrad.\n\n"
@@ -516,7 +517,7 @@ async def phone_type_chosen(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "back_to_products")
 async def back_to_products(callback: types.CallbackQuery, state: FSMContext):
     update_last_interaction(callback.from_user.id)
-    await state.set_state(SupportStates.waiting_for_product)
+    await state.clear()
     await callback.message.edit_text(
         "👋 Здравствуйте! Это техническая поддержка GadgetGrad.\n\n"
         "Пожалуйста, выберите товар, по которому у вас возник вопрос:",
@@ -580,7 +581,7 @@ async def unknown_message(message: types.Message, state: FSMContext):
 
 # === ФОНОВЫЕ ЗАДАЧИ ===
 
-ADMIN_CHAT_ID = 7955385938  # 👈 Ваш chat_id
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))  # читаем из .env
 
 async def heartbeat_monitor(bot: Bot):
     """Отправляет сообщение раз в час, чтобы подтвердить, что бот работает."""
@@ -605,7 +606,7 @@ async def review_scheduler(bot: Bot):
                         text=(
                             "🙏 Спасибо, что обратились в поддержку **GadgetGrad**!\n"
                             "Мы очень старались помочь вам — и очень надеемся, что у нас это получилось.\n\n"
-                            "Если вы остались довольны — не могли бы вы уделить пару минут и оставить **5 звёзд** на Wildberries?\n"
+                            "Если вы остались довольны — не могли бы вы уделить пару минут и [оставить 5 звёзд на Wildberries](https://www.wildberries.ru/lk/myorders/archive)?\n"
                             "Ваш отзыв помогает другим покупателям уверенно выбирать технику, а нам — продолжать стараться ещё лучше 🌟🌟🌟🌟🌟\n\n"
                             "С благодарностью,\n"
                             "Команда **GadgetGrad**"
