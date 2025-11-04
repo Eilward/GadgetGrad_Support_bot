@@ -159,14 +159,6 @@ async def process_cashback(callback: types.CallbackQuery, state: FSMContext):
     )
 
 
-@dp.callback_query(lambda c: c.data.startswith("product:"), SupportStates.waiting_for_product)
-async def product_chosen(callback: types.CallbackQuery, state: FSMContext):
-    # Этот обработчик будет вызываться только если пользователь уже в состоянии выбора
-    # Но после /start состояние не установлено — поэтому добавим отдельный обработчик без состояния
-    pass
-
-
-# Новый обработчик выбора товара БЕЗ начального состояния (т.к. state не установлен после /start)
 @dp.callback_query(lambda c: c.data.startswith("product:"))
 async def product_chosen_no_state(callback: types.CallbackQuery, state: FSMContext):
     product_code = callback.data.split(":")[1]
@@ -242,7 +234,7 @@ async def screen_faq(callback: types.CallbackQuery, state: FSMContext):
         "4. *Яндекс Навигатор требует подписку?*\n"
         "– Да, для работы в CarPlay/Android Auto требуется **Яндекс Плюс**.\n"
         "Подробнее: [yandex.ru/project/maps/auto/android-auto_non-plus](https://yandex.ru/project/maps/auto/android-auto_non-plus/)\n"
-        "Альтернатива: Google Карты или 2ГИС.\n\n"
+        "Альтернатива: Google Карты или 2ГИС — работают без подписки.\n\n"
         "5. *Есть ли на экране русский язык?*\n"
         "– Да. Зайдите в настройки (шестерёнка внизу слева) → **Language** → выберите **Русский**.\n"
         "⚠️ Перевод пока не идеален, но мы работаем над улучшением.\n\n"
@@ -387,7 +379,7 @@ async def question_chosen(callback: types.CallbackQuery, state: FSMContext):
                     "4. Дождитесь подключения и наслаждайтесь CarPlay (если у вас iPhone) и Android Auto (если у вас Android смартфон).\n\n"
                     "💡 *Индикация адаптера:*\n"
                     "• Адаптер горит красным – смартфон не подключен;\n"
-                    "• Адаптер горит зелёным или синим – смартфон подключён.\n\n"
+                    "• Адаптер горит зелёным или синим — смартфон подключён.\n\n"
                     "⚠️ *Если подключить не удалось, необходимо проверить следующее:*\n"
                     "• Если у вас iPhone — версия операционной системы должна быть **iOS 10.0 и выше**;\n"
                     "• Если у вас Android — версия операционной системы должна быть **Android 11.0 и выше**;\n"
@@ -616,7 +608,7 @@ async def unknown_message(message: types.Message, state: FSMContext):
 
 # === ФОНОВЫЕ ЗАДАЧИ ===
 
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))  # читаем из .env
+ADMIN_CHAT_ID = 7955385938  # ЗАХАРДКОДЖЕННЫЙ ID (как вы просили)
 
 async def heartbeat_monitor(bot: Bot):
     """Отправляет сообщение раз в час, чтобы подтвердить, что бот работает."""
