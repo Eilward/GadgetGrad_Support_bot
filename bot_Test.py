@@ -38,10 +38,12 @@ def update_last_interaction(user_id: int):
     if user_id in review_sent:
         review_sent.discard(user_id)
 
+
 # === КЛАВИАТУРЫ ===
 
-def get_product_keyboard():
+def get_start_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 Получить кэшбек", callback_data="cashback")],
         [InlineKeyboardButton(text="Carlinkit 5.0", callback_data="product:cl5")],
         [InlineKeyboardButton(text="Carlinkit 5.0 mini pro", callback_data="product:cl5_mini")],
         [InlineKeyboardButton(text="Экран с CarPlay/AA", callback_data="product:screen")]
@@ -124,35 +126,69 @@ def get_other_questions_kb():
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     update_last_interaction(message.from_user.id)
     await message.answer(
         "👋 Здравствуйте! Это техническая поддержка GadgetGrad.\n\n"
-        "Пожалуйста, выберите товар, по которому у вас возник вопрос:",
-        reply_markup=get_product_keyboard()
+        "Пожалуйста, выберите действие:",
+        reply_markup=get_start_keyboard()
     )
-    await state.set_state(SupportStates.waiting_for_product)
+
+
+@dp.callback_query(lambda c: c.data == "cashback")
+async def process_cashback(callback: types.CallbackQuery, state: FSMContext):
+    update_last_interaction(callback.from_user.id)
+    await callback.answer()
+
+    cashback_text = (
+        "🎁 <b>Получите кэшбек 200 ₽!</b>\n\n"
+        "Чтобы получить кэшбек, выполните два простых условия:\n\n"
+        "1️⃣ Оставьте отзыв на Wildberries: ⭐⭐⭐⭐⭐ (5 звёзд)\n"
+        "   👉 <a href='https://www.wildberries.ru/lk/discussion/feedback?type=waiting_feedbacks'>Оставить отзыв</a>\n\n"
+        "2️⃣ Присылайте скриншот отзыва и номер телефона для пополнения в наш чат.\n\n"
+        "После проверки кэшбек придёт в течение 1–2 дней 💸"
+    )
+
+    await callback.message.edit_text(
+        text=cashback_text,
+        parse_mode="HTML",
+        disable_web_page_preview=False,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Отправить скриншот", url="https://t.me/GadgetGrad_Official")]
+        ])
+    )
 
 
 @dp.callback_query(lambda c: c.data.startswith("product:"), SupportStates.waiting_for_product)
 async def product_chosen(callback: types.CallbackQuery, state: FSMContext):
-    update_last_interaction(callback.from_user.id)
+    # Этот обработчик будет вызываться только если пользователь уже в состоянии выбора
+    # Но после /start состояние не установлено — поэтому добавим отдельный обработчик без состояния
+    pass
+
+
+# Новый обработчик выбора товара БЕЗ начального состояния (т.к. state не установлен после /start)
+@dp.callback_query(lambda c: c.data.startswith("product:"))
+async def product_chosen_no_state(callback: types.CallbackQuery, state: FSMContext):
     product_code = callback.data.split(":")[1]
+    if product_code not in ("cl5", "cl5_mini", "screen"):
+        await callback.answer("Неизвестный товар.")
+        return
+
+    update_last_interaction(callback.from_user.id)
     product_names = {
         "cl5": "Carlinkit 5.0",
         "cl5_mini": "Carlinkit 5.0 mini pro",
         "screen": "Экран с CarPlay/AA"
     }
-    product_name = product_names.get(product_code, "Неизвестный товар")
+    product_name = product_names[product_code]
     await state.update_data(chosen_product=product_name, product_code=product_code)
 
     if product_code in ("cl5", "cl5_mini"):
         kb = get_cl5_questions_kb()
         await state.set_state(SupportStates.waiting_for_question)
-    elif product_code == "screen":
+    else:
         kb = get_screen_questions_kb()
         await state.set_state(SupportStates.waiting_for_question)
-    else:
-        kb = get_other_questions_kb()
 
     await callback.message.edit_text(
         f"Вы выбрали: *{product_name}*\n\nВыберите ваш вопрос:",
@@ -210,22 +246,17 @@ async def screen_faq(callback: types.CallbackQuery, state: FSMContext):
         "5. *Есть ли на экране русский язык?*\n"
         "– Да. Зайдите в настройки (шестерёнка внизу слева) → **Language** → выберите **Русский**.\n"
         "⚠️ Перевод пока не идеален, но мы работаем над улучшением.\n\n"
-        "6. *Можно ли просматривать видео на экране?*\n"
-        "– Да, подключите телефон **проводом к экрану**:\n"
-        "• Для Android — установите **MirrorLink** из Play Маркета;\n"
-        "• Для iPhone — приложение не нужно.\n"
-        "Выберите **MirrorLink** — запустится дублирование экрана.\n\n"
-        "7. *Есть ли GPS?*\n"
+        "6. *Есть ли GPS?*\n"
         "– Нет. Навигация работает **только через CarPlay и Android Auto**.\n"
         "Подробнее:\n"
         "• [CarPlay](https://www.apple.com/ios/carplay/)\n"
         "• [Android Auto](https://www.android.com/intl/ru_ru/auto/)\n\n"
-        "8. *Можно ли скачать карты на Экран?*\n"
+        "7. *Можно ли скачать карты на Экран?*\n"
         "– Нет, это не классический навигатор. Навигация — только через CarPlay/Android Auto.\n"
         "Подробнее:\n"
         "• [CarPlay](https://www.apple.com/ios/carplay/)\n"
         "• [Android Auto](https://www.android.com/intl/ru_ru/auto/)\n\n"
-        "9. *Можно ли использовать без AUX-кабеля?*\n"
+        "8. *Можно ли использовать без AUX-кабеля?*\n"
         "– Да, если ваше головное устройство поддерживает **Bluetooth-аудио**. Подключите телефон к экрану (для CarPlay/AA) и к ГУ (для звука)."
     )
     await callback.message.edit_text(
@@ -459,7 +490,7 @@ async def question_chosen(callback: types.CallbackQuery, state: FSMContext):
     else:
         await callback.message.edit_text(
             "Спасибо! Наш специалист скоро свяжется с вами.",
-            reply_markup=get_product_keyboard()
+            reply_markup=get_start_keyboard()
         )
     await callback.answer()
 
@@ -521,11 +552,11 @@ async def phone_type_chosen(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "back_to_products")
 async def back_to_products(callback: types.CallbackQuery, state: FSMContext):
     update_last_interaction(callback.from_user.id)
-    await state.set_state(SupportStates.waiting_for_product)
+    await state.clear()
     await callback.message.edit_text(
         "👋 Здравствуйте! Это техническая поддержка GadgetGrad.\n\n"
-        "Пожалуйста, выберите товар, по которому у вас возник вопрос:",
-        reply_markup=get_product_keyboard()
+        "Пожалуйста, выберите действие:",
+        reply_markup=get_start_keyboard()
     )
     await callback.answer()
 
@@ -553,7 +584,7 @@ async def unknown_message(message: types.Message, state: FSMContext):
     if current_state == SupportStates.waiting_for_product:
         await message.answer(
             "Пожалуйста, выберите товар, используя кнопки ниже.",
-            reply_markup=get_product_keyboard()
+            reply_markup=get_start_keyboard()
         )
     elif current_state == SupportStates.waiting_for_question:
         product_data = await state.get_data()
@@ -585,7 +616,7 @@ async def unknown_message(message: types.Message, state: FSMContext):
 
 # === ФОНОВЫЕ ЗАДАЧИ ===
 
-ADMIN_CHAT_ID = 7955385938  # 👈 Ваш chat_id
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))  # читаем из .env
 
 async def heartbeat_monitor(bot: Bot):
     """Отправляет сообщение раз в час, чтобы подтвердить, что бот работает."""
@@ -610,7 +641,7 @@ async def review_scheduler(bot: Bot):
                         text=(
                             "🙏 Спасибо, что обратились в поддержку **GadgetGrad**!\n"
                             "Мы очень старались помочь вам — и очень надеемся, что у нас это получилось.\n\n"
-                            "Если вы остались довольны — не могли бы вы уделить пару минут и оставить **5 звёзд** на Wildberries?\n"
+                            "Если вы остались довольны — не могли бы вы уделить пару минут и [оставить 5 звёзд на Wildberries](https://www.wildberries.ru/lk/myorders/archive)?\n"
                             "Ваш отзыв помогает другим покупателям уверенно выбирать технику, а нам — продолжать стараться ещё лучше 🌟🌟🌟🌟🌟\n\n"
                             "С благодарностью,\n"
                             "Команда **GadgetGrad**"
